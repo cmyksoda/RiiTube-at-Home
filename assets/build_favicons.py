@@ -84,9 +84,7 @@ cutouts.remove(cutouts[0])
 cutouts[0].set('fill', 'black')
 m.append(cutouts)
 pinned[2].remove(pinned[2][1])
-pinned[2].set('mask', 'url(#letter-cutouts)')
 # Apply the mask in document coordinates around the transformed badge.
-pinned[2].attrib.pop('mask')
 badge_group = pinned[2]
 pinned.remove(badge_group)
 wrapper = ET.SubElement(pinned, f'{{{SVG}}}g', mask='url(#letter-cutouts)')
