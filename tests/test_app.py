@@ -15,7 +15,9 @@ class LanServerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         with patch.dict(os.environ, {"RIIRIITUBE_DATA": self.temp.name}):
-            spec = importlib.util.spec_from_file_location("riiriitube_test_app", Path(__file__).parents[1] / "app.py")
+            spec = importlib.util.spec_from_file_location(
+                "riiriitube_test_app", Path(__file__).parents[1] / "app.py"
+            )
             self.module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.module)
         self.client = self.module.app.test_client()
@@ -43,8 +45,11 @@ class LanServerTests(unittest.TestCase):
         with self.client.head(url) as response:
             self.assertEqual(response.headers["Content-Length"], str(len(full)))
             self.assertEqual(response.data, b"")
-        for header, expected in [("bytes=100-199", full[100:200]), ("bytes=-100", full[-100:]),
-                                 ("bytes=8000-", full[8000:])]:
+        for header, expected in [
+            ("bytes=100-199", full[100:200]),
+            ("bytes=-100", full[-100:]),
+            ("bytes=8000-", full[8000:]),
+        ]:
             with self.client.get(url, headers={"Range": header}) as response:
                 self.assertEqual(response.status_code, 206)
                 self.assertEqual(response.data, expected)
@@ -53,7 +58,7 @@ class LanServerTests(unittest.TestCase):
 
     def test_file_over_four_gigabytes(self):
         path = self.ready_file()
-        size = 5 * 1024 ** 3
+        size = 5 * 1024**3
         with path.open("r+b") as file:
             file.truncate(size)
             file.seek(size - 4)
@@ -79,7 +84,9 @@ class LanServerTests(unittest.TestCase):
         self.assertIn(f"/media/{self.vid}.ts", playlist)
         self.assertNotIn(f"/media/{self.vid}.mp4", playlist)
         for ext in ("mkv", "ts", "mp4"):
-            with self.client.get(f"/media/{self.vid}.{ext}", headers={"Range": "bytes=0-3"}) as response:
+            with self.client.get(
+                f"/media/{self.vid}.{ext}", headers={"Range": "bytes=0-3"}
+            ) as response:
                 self.assertEqual(response.status_code, 206)
                 self.assertEqual(len(response.data), 4)
         self.assertEqual(self.client.get(f"/media/{self.vid}.json").status_code, 404)
@@ -87,9 +94,17 @@ class LanServerTests(unittest.TestCase):
         self.assertEqual(self.client.get(f"/media/{self.vid}.mkv").status_code, 404)
 
     def test_url_validation(self):
-        for value in [self.vid, f"https://youtu.be/{self.vid}?t=2", f"https://www.youtube.com/watch?v={self.vid}"]:
+        for value in [
+            self.vid,
+            f"https://youtu.be/{self.vid}?t=2",
+            f"https://www.youtube.com/watch?v={self.vid}",
+        ]:
             self.assertEqual(self.module.video_id(value), self.vid)
-        for value in ["../../etc/passwd", "http://localhost/admin", f"https://youtube.com.evil.test/watch?v={self.vid}"]:
+        for value in [
+            "../../etc/passwd",
+            "http://localhost/admin",
+            f"https://youtube.com.evil.test/watch?v={self.vid}",
+        ]:
             with self.assertRaises(ValueError):
                 self.module.video_id(value)
 
@@ -98,7 +113,9 @@ class LanServerTests(unittest.TestCase):
         auto = {"en": [{"ext": "srt"}], "en-orig": [{"ext": "vtt"}]}
         self.assertIsNone(select({"automatic_captions": auto}))
         self.assertIsNone(select({"subtitles": {"fr": [{}]}, "automatic_captions": auto}))
-        self.assertEqual(select({"subtitles": {"en-GB": [{}]}, "automatic_captions": auto}), "en-GB")
+        self.assertEqual(
+            select({"subtitles": {"en-GB": [{}]}, "automatic_captions": auto}), "en-GB"
+        )
         self.assertEqual(select({"subtitles": {"en-US": [{}], "en": [{}]}}), "en")
         self.assertIsNone(select({"subtitles": {"en": [], "english": [{}]}}))
 
@@ -106,8 +123,9 @@ class LanServerTests(unittest.TestCase):
         folder = Path(self.temp.name)
         (folder / "english.srt").write_text("stale captions")
         with patch.object(self.module, "run_logged") as run:
-            result = self.module.download_captions({"automatic_captions": {"en": [{}]}},
-                                                   folder / "info.json", folder, folder / "log")
+            result = self.module.download_captions(
+                {"automatic_captions": {"en": [{}]}}, folder / "info.json", folder, folder / "log"
+            )
         self.assertIsNone(result)
         self.assertFalse((folder / "english.srt").exists())
         run.assert_not_called()
@@ -120,7 +138,11 @@ class LanServerTests(unittest.TestCase):
         self.assertEqual(self.module.jobs[self.vid]["status"], "error")
 
     def test_playlist_escape_and_local_links(self):
-        with patch.object(self.module, "search_page", return_value=([{"id": self.vid, "title": "hello\ntype=video\nURL=evil"}], False)):
+        with patch.object(
+            self.module,
+            "search_page",
+            return_value=([{"id": self.vid, "title": "hello\ntype=video\nURL=evil"}], False),
+        ):
             response = self.client.get("/wiimc/search.plx?q=test")
         text = response.text
         self.assertEqual(text.count("\ntype="), 2)
@@ -133,12 +155,22 @@ class LanServerTests(unittest.TestCase):
         self.assertEqual([link.attrib["type"] for link in folder], ["search", "playlist"])
 
     def search_result(self, count):
-        return SimpleNamespace(returncode=0, stdout=json.dumps({"entries": [
-            {"id": f"{number:011d}", "title": f"Result {number}"} for number in range(count)
-        ]}))
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "entries": [
+                        {"id": f"{number:011d}", "title": f"Result {number}"}
+                        for number in range(count)
+                    ]
+                }
+            ),
+        )
 
     def test_search_pages_fetch_only_the_window_and_lookahead(self):
-        with patch.object(self.module.subprocess, "run", return_value=self.search_result(13)) as run:
+        with patch.object(
+            self.module.subprocess, "run", return_value=self.search_result(13)
+        ) as run:
             results, has_next = self.module.search_page("cats", 2)
         self.assertEqual(len(results), 12)
         self.assertTrue(has_next)
@@ -148,9 +180,11 @@ class LanServerTests(unittest.TestCase):
         self.assertEqual(command[-1], "ytsearch25:cats")
 
     def test_search_cache_separates_pages_and_expires(self):
-        with patch.object(self.module.subprocess, "run", side_effect=[
-            self.search_result(13), self.search_result(3), self.search_result(2)
-        ]) as run:
+        with patch.object(
+            self.module.subprocess,
+            "run",
+            side_effect=[self.search_result(13), self.search_result(3), self.search_result(2)],
+        ) as run:
             first = self.module.search_page("cats", 1)
             second = self.module.search_page("cats", 2)
             self.assertEqual(self.module.search("cats"), first[0])
@@ -164,7 +198,10 @@ class LanServerTests(unittest.TestCase):
 
     def test_search_pages_end_without_phantom_next_page(self):
         for count in (0, 3, 12):
-            with self.subTest(count=count), patch.object(self.module.subprocess, "run", return_value=self.search_result(count)):
+            with (
+                self.subTest(count=count),
+                patch.object(self.module.subprocess, "run", return_value=self.search_result(count)),
+            ):
                 results, has_next = self.module.search_page(f"count {count}")
             self.assertEqual(len(results), count)
             self.assertFalse(has_next)
@@ -177,12 +214,18 @@ class LanServerTests(unittest.TestCase):
 
     def test_wii_page_links_keep_the_query_and_can_be_followed(self):
         query = "cats & dogs + # café /?"
-        pages = [([{"id": self.vid, "title": "First"}], True),
-                 ([{"id": "roBkg-iPrbw", "title": "Second"}], False)]
+        pages = [
+            ([{"id": self.vid, "title": "First"}], True),
+            ([{"id": "roBkg-iPrbw", "title": "Second"}], False),
+        ]
         with patch.object(self.module, "search_page", side_effect=pages) as search:
             first = self.client.get("/wiimc/search.plx", query_string={"q": query}).text
             self.assertNotIn("Previous page", first)
-            next_url = next(line[4:] for line in first.splitlines() if line.startswith("URL=") and "page=2" in line)
+            next_url = next(
+                line[4:]
+                for line in first.splitlines()
+                if line.startswith("URL=") and "page=2" in line
+            )
             self.assertEqual(parse_qs(urlsplit(next_url).query), {"q": [query], "page": ["2"]})
             second = self.client.get(urlsplit(next_url).path + "?" + urlsplit(next_url).query).text
         self.assertEqual(search.call_args_list[1].args, (query, 2))
@@ -197,7 +240,10 @@ class LanServerTests(unittest.TestCase):
         self.assertIn("Previous page (2)", text)
         self.assertIn("No results", text)
         self.assertNotIn("Next page", text)
-        for error in (RuntimeError("Try again"), self.module.subprocess.TimeoutExpired("yt-dlp", 50)):
+        for error in (
+            RuntimeError("Try again"),
+            self.module.subprocess.TimeoutExpired("yt-dlp", 50),
+        ):
             with patch.object(self.module, "search_page", side_effect=error):
                 text = self.client.get("/wiimc/search.plx?q=cats&page=3").text
             self.assertIn("Previous page (2)", text)
@@ -207,7 +253,12 @@ class LanServerTests(unittest.TestCase):
     def test_invalid_pages_do_not_start_a_search(self):
         with patch.object(self.module, "search_page") as search:
             for page in ("0", "-1", "oops", "1.5", ""):
-                self.assertIn("Invalid page", self.client.get("/wiimc/search.plx", query_string={"q": "cats", "page": page}).text)
+                self.assertIn(
+                    "Invalid page",
+                    self.client.get(
+                        "/wiimc/search.plx", query_string={"q": "cats", "page": page}
+                    ).text,
+                )
         search.assert_not_called()
 
     def test_retry_deduplication(self):
@@ -251,9 +302,15 @@ class LanServerTests(unittest.TestCase):
         self.assertEqual(self.module.jobs[self.vid]["status"], "error")
 
     def test_cross_site_and_public_requests_rejected(self):
-        self.assertEqual(self.client.get("/", headers={"Sec-Fetch-Site": "cross-site"}).status_code, 403)
-        self.assertEqual(self.client.get("/", environ_base={"REMOTE_ADDR": "8.8.8.8"}).status_code, 403)
-        response = self.client.post("/api/prepare", json={"video": self.vid}, headers={"Origin": "https://evil.test"})
+        self.assertEqual(
+            self.client.get("/", headers={"Sec-Fetch-Site": "cross-site"}).status_code, 403
+        )
+        self.assertEqual(
+            self.client.get("/", environ_base={"REMOTE_ADDR": "8.8.8.8"}).status_code, 403
+        )
+        response = self.client.post(
+            "/api/prepare", json={"video": self.vid}, headers={"Origin": "https://evil.test"}
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_remove_deletes_entire_video_folder_and_survives_restart(self):
@@ -283,7 +340,9 @@ class LanServerTests(unittest.TestCase):
     def test_remove_rejects_active_jobs_and_cross_site_requests(self):
         path = self.ready_file()
         url = f"/api/videos/{self.vid}"
-        self.assertEqual(self.client.delete(url, headers={"Origin": "https://evil.test"}).status_code, 403)
+        self.assertEqual(
+            self.client.delete(url, headers={"Origin": "https://evil.test"}).status_code, 403
+        )
         for status in ["queued", "downloading", "converting"]:
             self.module.jobs[self.vid]["status"] = status
             self.assertEqual(self.client.delete(url).status_code, 409)
@@ -296,7 +355,10 @@ class LanServerTests(unittest.TestCase):
 
     def test_remove_failure_keeps_job_for_retry(self):
         path = self.ready_file()
-        with patch.object(self.module.shutil, "rmtree", side_effect=PermissionError), self.assertLogs(level="ERROR"):
+        with (
+            patch.object(self.module.shutil, "rmtree", side_effect=PermissionError),
+            self.assertLogs(level="ERROR"),
+        ):
             self.assertEqual(self.client.delete(f"/api/videos/{self.vid}").status_code, 500)
         self.assertTrue(path.exists())
         self.assertIn(self.vid, self.module.jobs)
@@ -325,7 +387,9 @@ class LanServerTests(unittest.TestCase):
             self.assertNotIn("a few little details", page)
             self.assertNotIn("Pause/play and volume use", page)
             root = ET.fromstring(self.client.get("/onlinemedia.xml").data)
-            self.assertTrue(all(link.attrib["addr"].startswith(base + "/") for link in root.iter("link")))
+            self.assertTrue(
+                all(link.attrib["addr"].startswith(base + "/") for link in root.iter("link"))
+            )
             self.assertIn(f"URL={base}/wiimc/library.plx", self.client.get("/wiimc/home.plx").text)
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise an isolated container, including real downloads and both caption choices."""
+
 import json
 import sys
 import time
@@ -28,9 +29,12 @@ with get('/api/search?q=Ahoy%20trackers') as response:
 print('Page, logo, LAN playlists and live search passed.', flush=True)
 
 for vid, hardsubs in [('jNQXAC9IVRw', False), ('roBkg-iPrbw', True)]:
-    request = Request(base + '/api/prepare', method='POST',
-                      data=json.dumps({'video': vid, 'hardsubs': hardsubs}).encode(),
-                      headers={'Content-Type': 'application/json'})
+    request = Request(
+        base + '/api/prepare',
+        method='POST',
+        data=json.dumps({'video': vid, 'hardsubs': hardsubs}).encode(),
+        headers={'Content-Type': 'application/json'},
+    )
     with urlopen(request, timeout=10) as response:
         assert response.status == 202
     started = time.monotonic()
@@ -65,4 +69,7 @@ for vid, hardsubs in [('jNQXAC9IVRw', False), ('roBkg-iPrbw', True)]:
     with get(f'/thumb/{vid}.jpg') as response:
         assert response.headers.get_content_type() == 'image/jpeg'
         assert response.read().startswith(b'\xff\xd8')
-print('Both caption choices, download/encode, MKV playback routes, thumbnails and range requests passed.', flush=True)
+print(
+    'Both caption choices, download/encode, MKV playback routes, thumbnails and range requests passed.',
+    flush=True,
+)
