@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+data/
+research/
+project-notes/
+*.log
+.env
+.env.*
+!.env.example

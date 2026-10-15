@@ -1,0 +1,19 @@
+name: riitube-at-home
+
+services:
+  riitube:
+    container_name: riitube-at-home
+    image: cmyksoda/riitube-at-home:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${LAN_IP:?Set LAN_IP in .env}:${PORT:-301}:301"
+    environment:
+      RIIRIITUBE_URL: "http://${LAN_IP:?Set LAN_IP in .env}:${PORT:-301}"
+    volumes:
+      - videos:/data
+    restart: unless-stopped
+
+volumes:
+  videos:
