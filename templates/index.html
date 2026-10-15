@@ -106,16 +106,16 @@ nav a:first-child {
   padding: 15px 18px;
 }
 form {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 5px 8px;
 }
 label {
   font-weight: bold;
   white-space: nowrap;
 }
 #query {
-  flex: 1;
   min-width: 0;
   border: 1px solid #999;
   box-shadow: inset 1px 1px 2px #ddd;
@@ -167,7 +167,8 @@ input:focus-visible {
   padding: 6px 20px;
 }
 .search-hint {
-  margin: 5px 0 0 86px;
+  grid-column: 2 / -1;
+  margin: 0;
   color: #777;
   font-size: 11px;
 }
@@ -374,11 +375,14 @@ footer {
   #search > label {
     display: none;
   }
+  #search {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
   .search-strip {
     padding: 12px;
   }
   .search-hint {
-    margin-left: 0;
+    grid-column: 1 / -1;
   }
   #search button {
     padding: 6px 10px;
@@ -397,8 +401,9 @@ footer {
 </header>
 <nav aria-label="Main navigation"><a href="#your-videos">My Videos</a><a href="#query" id="nav-search">Search Videos</a><a href="#setup" id="nav-setup">Wii Setup</a></nav>
 <div class="search-strip">
-<form id="search"><label for="query">Search Videos</label><input id="query" aria-label="Search or YouTube link" placeholder="Search YouTube or paste a video link" required maxlength="200"><button>Search</button></form>
+<form id="search"><label for="query">Search Videos</label><input id="query" aria-label="Search or YouTube link" placeholder="Search YouTube or paste a video link" required maxlength="200"><button>Search</button>
 <p class="search-hint">Find an old favorite, a new obsession, or something very, very long.</p>
+</form>
 <div class="caption-option"><input type="checkbox" id="hardsubs" checked><label for="hardsubs">Add hardsubs if available?</label></div>
 </div>
 <div class="layout">
@@ -426,7 +431,7 @@ footer {
 &lt;/folder&gt;</code></pre>
 <p>Videos are prepared at up to 360p / 30 fps and kept on this computer. Preparation downloads the whole video first, so longer videos need more time and disk space.</p>
 </details>
-<footer>RiiTube at Home <span class="heart">♥</span> a LAN companion for WiiMC-SS<br>Inspired by <a href="https://github.com/Larsenv/RiiTube">Larsen’s RiiTube</a>. Best enjoyed on the couch.<br><a href="https://github.com/cmyksoda/RiiTube-at-Home">Source</a> · <a href="https://github.com/cmyksoda/RiiTube-at-Home/blob/main/LICENSE">AGPLv3</a></footer>
+<footer>RiiTube at Home <span class="heart">♥</span> A LAN companion for WiiMC-SS<br>Inspired by <a href="https://github.com/Larsenv/RiiTube">Larsen’s RiiTube</a>. Best enjoyed on the couch.<br><a href="https://github.com/cmyksoda/RiiTube-at-Home">Source</a> · <a href="https://github.com/cmyksoda/RiiTube-at-Home/blob/main/LICENSE">AGPLv3</a></footer>
 <script>
 const el = id => document.getElementById(id);
 const message = text => {
