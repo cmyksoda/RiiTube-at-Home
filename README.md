@@ -1,6 +1,6 @@
 # RiiTube at Home
 
-a LAN companion for WiiMC-SS. Search YouTube, prepare a video on your server,
+A LAN companion for WiiMC-SS. Search YouTube, prepare a video on your server,
 and watch a complete, seekable copy on the Wii.
 
 - Search with thumbnails and browse multiple result pages in WiiMC.
