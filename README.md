@@ -3,6 +3,8 @@
 A LAN companion for WiiMC-SS. Search YouTube, prepare a video on your server,
 and watch a complete, seekable copy on the Wii.
 
+Designed for a RiiTube-like experience on your home network. Faster load times, videos downloaded to your machine indefinitely, and local transcoding.
+
 - Search with thumbnails and browse multiple result pages in WiiMC.
 - Queue videos and check preparation progress from WiiMC or a browser.
 - Prepare H.264/AAC video for Wii playback in MKV, with MP4 for browsers.
