@@ -1,5 +1,10 @@
 # RiiTube at Home
 
+<picture>
+  <source media="(max-width: 640px)" srcset="assets/screenshots/mobile.png">
+  <img src="assets/screenshots/desktop.png" alt="RiiTube at Home with its search box and a library of prepared videos." width="1040">
+</picture>
+
 A LAN companion for WiiMC-SS. Search YouTube, prepare a video on your server,
 and watch a complete, seekable copy on the Wii.
 
