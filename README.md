@@ -46,8 +46,17 @@ Set `RIIRIITUBE_URL` to the address your Wii can reach; the native default port 
 
 Run tests with `python3 -m unittest discover -s tests -v` in the installed environment.
 
+## Credits
+
+- **RiiTube** by Larsenv, which inspired this project ([Larsenv/RiiTube](https://github.com/Larsenv/RiiTube))
+- **yt-dlp** and its **yt-dlp-ejs** companion by the yt-dlp contributors, for searching YouTube and downloading videos
+- **FFmpeg** by the FFmpeg developers, for converting videos and burning in subtitles
+- **Node.js** by the Node.js contributors, the JavaScript runtime yt-dlp uses
+- **Flask** by Pallets, **Waitress** by the Zope Foundation and contributors, and **Pillow** by Jeffrey "Alex" Clark and contributors, for the web server and thumbnails
+- **Oswald** by The Oswald Project Authors, the font behind the "Rii" lettering in the logo
+- **Noto Sans** by the Noto Project Authors, the font for burned-in subtitles
+- The logo and icons adapt YouTube's 2006–2011 wordmark and 2005–2009 favicon, from Wikimedia Commons, which marks them PD-textlogo. YouTube's marks remain their owners' marks. See the [asset credits](assets/README.md).
+
 ## License
 
-Original code is licensed under [GNU AGPLv3](LICENSE). Fonts and referenced
-artwork retain their own notices; see [asset credits](assets/README.md).
-Inspired by [Larsenv's RiiTube](https://github.com/Larsenv/RiiTube).
+The original code in RiiTube at Home is free software under the [GNU Affero General Public License, version 3](LICENSE). Fonts and referenced artwork retain their own notices; see the [asset credits](assets/README.md). The Oswald font is under the SIL Open Font License 1.1, and its text is in [`static/fonts/OFL-Oswald.txt`](static/fonts/OFL-Oswald.txt).
