@@ -59,4 +59,4 @@ Run tests with `python3 -m unittest discover -s tests -v` in the installed envir
 
 ## License
 
-The original code in RiiTube at Home is free software under the [GNU Affero General Public License, version 3](LICENSE). Fonts and referenced artwork retain their own notices; see the [asset credits](assets/README.md). The Oswald font is under the SIL Open Font License 1.1, and its text is in [`static/fonts/OFL-Oswald.txt`](static/fonts/OFL-Oswald.txt).
+The original code in RiiTube at Home is free software under the [GNU Affero General Public License, version 3 or later](LICENSE). Fonts and referenced artwork retain their own notices; see the [asset credits](assets/README.md). The Oswald font is under the SIL Open Font License 1.1, and its text is in [`static/fonts/OFL-Oswald.txt`](static/fonts/OFL-Oswald.txt).

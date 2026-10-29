@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 cmyksoda
 """RiiTube at Home: prepare seekable YouTube videos for WiiMC over a home LAN."""
 

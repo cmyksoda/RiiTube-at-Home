@@ -5,7 +5,7 @@ FROM python:3.14-slim-trixie
 LABEL org.opencontainers.image.title="RiiTube at Home" \
       org.opencontainers.image.description="YouTube search and seekable LAN video preparation for WiiMC-SS" \
       org.opencontainers.image.authors="cmyksoda" \
-      org.opencontainers.image.licenses="AGPL-3.0-only"
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
