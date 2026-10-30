@@ -207,7 +207,7 @@ h2 {
 #message {
   color: #555;
   min-height: 0;
-  margin: 10px 0;
+  margin: 0 0 19px;
 }
 #message:empty {
   display: none;
@@ -498,7 +498,12 @@ function card(item, prepared) {
   duration.className = 'duration';
   if (item.duration) {
     const seconds = Math.floor(item.duration);
-    duration.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor(seconds / 60) % 60;
+    const secs = String(seconds % 60).padStart(2, '0');
+    duration.textContent = hours
+      ? `${hours}:${String(minutes).padStart(2, '0')}:${secs}`
+      : `${minutes}:${secs}`;
   }
   const actions = document.createElement('div');
   actions.className = 'video-actions';
