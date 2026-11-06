@@ -18,6 +18,7 @@ with get('/') as response:
     page = response.read().decode()
     assert 'RiiTube at Home' in page
     assert 'Add hardsubs if available?' in page
+    assert 'Crop to 4:3?' in page
 with get('/static/riitube-logo.svg') as response:
     assert b'<svg' in response.read()
 with get('/onlinemedia.xml') as response:
@@ -28,11 +29,11 @@ with get('/api/search?q=Ahoy%20trackers') as response:
     assert json.load(response), 'Search returned no results'
 print('Page, logo, LAN playlists and live search passed.', flush=True)
 
-for vid, hardsubs in [('jNQXAC9IVRw', False), ('roBkg-iPrbw', True)]:
+for vid, hardsubs, crop in [('jNQXAC9IVRw', False, False), ('roBkg-iPrbw', True, True)]:
     request = Request(
         base + '/api/prepare',
         method='POST',
-        data=json.dumps({'video': vid, 'hardsubs': hardsubs}).encode(),
+        data=json.dumps({'video': vid, 'hardsubs': hardsubs, 'crop': crop}).encode(),
         headers={'Content-Type': 'application/json'},
     )
     with urlopen(request, timeout=10) as response:
@@ -53,6 +54,7 @@ for vid, hardsubs in [('jNQXAC9IVRw', False), ('roBkg-iPrbw', True)]:
         time.sleep(10)
     assert job['status'] == 'ready', job
     assert job['hardsubs'] is hardsubs
+    assert job['crop'] is crop
     assert job['wii_format'] == 'mkv'
     if hardsubs:
         assert job['captions'] == {'kind': 'manual', 'language': 'en-GB'}

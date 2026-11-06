@@ -279,6 +279,26 @@ class LanServerTests(unittest.TestCase):
         self.assertFalse(saved["hardsubs"])
         response = self.client.post("/api/prepare", json={"video": self.vid, "hardsubs": "false"})
         self.assertEqual(response.status_code, 400)
+        response = self.client.post("/api/prepare", json={"video": self.vid, "crop": "yes"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_crop_choice_is_persisted_and_reprepares_finished_jobs(self):
+        self.module.worker_started = True
+        self.ready_file()
+        response = self.client.post("/api/prepare", json={"video": self.vid, "crop": True})
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(response.json["crop"])
+        saved = json.loads((Path(self.temp.name) / self.vid / "job.json").read_text())
+        self.assertTrue(saved["crop"])
+        self.assertEqual(self.module.pending.qsize(), 1)
+        with self.assertRaises(ValueError):
+            self.module.enqueue(self.vid, crop=False)
+
+    def test_crop_trims_only_the_sides_before_scaling(self):
+        self.assertNotIn("crop", self.module.video_filter())
+        cropped = self.module.video_filter(captions=True, crop=True)
+        self.assertTrue(cropped.startswith("crop=w='min(iw,ih*4/3)':h=ih,scale="))
+        self.assertLess(cropped.index("scale="), cropped.index("subtitles="))
 
     def test_changing_captions_reprepares_only_finished_jobs(self):
         self.module.worker_started = True

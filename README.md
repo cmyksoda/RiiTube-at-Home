@@ -14,6 +14,7 @@ Designed for a RiiTube-like experience on your home network. Faster load times, 
 - Queue videos and check preparation progress from WiiMC or a browser.
 - Prepare H.264/AAC video for Wii playback in MKV, with MP4 for browsers.
 - Optionally burn in creator-provided English subtitles; automatic captions are skipped.
+- Optionally crop widescreen videos to 4:3 for a full-screen picture on 4:3 TVs.
 
 ## Run
 

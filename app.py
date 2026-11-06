@@ -122,7 +122,7 @@ def load_jobs():
             logging.exception("Could not load cached job %s", file)
 
 
-def enqueue(vid, hardsubs=True):
+def enqueue(vid, hardsubs=True, crop=False):
     global worker_started
     with lock:
         if not worker_started:
@@ -130,11 +130,11 @@ def enqueue(vid, hardsubs=True):
             worker_started = True
         if vid in jobs and jobs[vid]["status"] != "error":
             existing = jobs[vid]
-            if existing.get("hardsubs", True) == hardsubs:
+            if existing.get("hardsubs", True) == hardsubs and existing.get("crop", False) == crop:
                 return dict(existing)
             if existing["status"] != "ready":
                 raise ValueError(
-                    "This video is already preparing. Wait until it finishes before changing subtitles."
+                    "This video is already preparing. Wait until it finishes before changing options."
                 )
         info = metadata.get(vid, {})
         jobs[vid] = {
@@ -144,6 +144,7 @@ def enqueue(vid, hardsubs=True):
             "status": "queued",
             "detail": "Waiting for the preparation worker.",
             "hardsubs": hardsubs,
+            "crop": crop,
         }
         result = patch_job(vid)
         pending.put(vid)
@@ -215,10 +216,12 @@ def download_captions(info, infofile, folder, logfile):
     return language
 
 
-def video_filter(captions=False):
+def video_filter(captions=False, crop=False):
     filters = (
         "scale=640:360:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps=30"
     )
+    if crop:
+        filters = "crop=w='min(iw,ih*4/3)':h=ih," + filters
     if captions:
         filters += f",subtitles=filename=english.srt:force_style='{SUBTITLE_STYLE}'"
     return filters
@@ -264,6 +267,7 @@ def prepare(vid):
     if info.get("is_live"):
         raise RuntimeError("Live streams are not supported; choose a finished video.")
     use_hardsubs = jobs[vid].get("hardsubs", True)
+    use_crop = jobs[vid].get("crop", False)
     caption_language = None
     if use_hardsubs:
         patch_job(vid, detail="Checking for creator-provided English subtitles…")
@@ -308,7 +312,7 @@ def prepare(vid):
             "-map",
             "0:a:0?",
             "-vf",
-            video_filter(bool(caption_language)),
+            video_filter(bool(caption_language), use_crop),
             "-c:v",
             "libx264",
             "-preset",
@@ -389,6 +393,8 @@ def prepare(vid):
     )
     if not use_hardsubs:
         caption_note = "hardsubs turned off"
+    if use_crop:
+        caption_note += ", cropped to 4:3"
     patch_job(
         vid, status="ready", detail=f"Ready — {caption_note}.", duration=actual, wii_format="mkv"
     )
@@ -528,9 +534,11 @@ def api_prepare():
     try:
         data = request.get_json() or {}
         hardsubs = data.get("hardsubs", True)
-        if not isinstance(hardsubs, bool):
-            raise ValueError("The hardsubs option must be true or false.")
-        return jsonify(enqueue(video_id(data.get("video", "")), hardsubs=hardsubs)), 202
+        crop = data.get("crop", False)
+        if not isinstance(hardsubs, bool) or not isinstance(crop, bool):
+            raise ValueError("The hardsubs and crop options must be true or false.")
+        vid = video_id(data.get("video", ""))
+        return jsonify(enqueue(vid, hardsubs=hardsubs, crop=crop)), 202
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
 
