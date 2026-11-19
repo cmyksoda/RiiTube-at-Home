@@ -127,9 +127,14 @@ label {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 6px 18px;
   margin: 10px 0 0;
   font-size: 12px;
+}
+.caption-option span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .caption-option label {
   font-weight: normal;
@@ -138,9 +143,6 @@ label {
 .caption-option input {
   margin: 0;
   accent-color: #c00;
-}
-.caption-option label + input {
-  margin-left: 12px;
 }
 button {
   border: 1px solid #999;
@@ -187,6 +189,9 @@ input:focus-visible {
   border: 1px solid #e6dca9;
   padding: 12px 16px;
   margin-bottom: 19px;
+}
+.welcome p {
+  margin-bottom: 0;
 }
 .welcome strong {
   color: #ac1616;
@@ -408,7 +413,7 @@ footer {
 <form id="search"><label for="query">Search Videos</label><input id="query" aria-label="Search or YouTube link" placeholder="Search YouTube or paste a video link" required maxlength="200"><button>Search</button>
 <p class="search-hint">Find an old favorite, a new obsession, or something very, very long.</p>
 </form>
-<div class="caption-option"><input type="checkbox" id="hardsubs" checked><label for="hardsubs">Add hardsubs if available?</label><input type="checkbox" id="sponsors" checked><label for="sponsors">Skip sponsored segments?</label><input type="checkbox" id="crop"><label for="crop">Crop to 4:3?</label></div>
+<div class="caption-option"><span><input type="checkbox" id="hardsubs" checked><label for="hardsubs">Add hardsubs if available?</label></span><span><input type="checkbox" id="sponsors" checked><label for="sponsors">Skip sponsored segments?</label></span><span><input type="checkbox" id="crop"><label for="crop">Crop to 4:3?</label></span></div>
 </div>
 <div class="layout">
 <main>
