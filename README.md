@@ -12,8 +12,9 @@ Designed for a RiiTube-like experience on your home network. Faster load times, 
 
 - Search with thumbnails and browse multiple result pages in WiiMC.
 - Queue videos and check preparation progress from WiiMC or a browser.
-- Prepare H.264/AAC video for Wii playback in MKV, with MP4 for browsers.
+- Prepare each video as a single H.264/AAC MKV that plays in WiiMC and in Chrome or Firefox (Safari can't play MKV).
 - Optionally burn in creator-provided English subtitles; automatic captions are skipped.
+- Cut sponsor segments out of prepared videos, using timestamps from [SponsorBlock](https://sponsor.ajay.app). This is on by default.
 - Optionally crop widescreen videos to 4:3 for a full-screen picture on 4:3 TVs.
 
 ## Run
@@ -51,6 +52,7 @@ Run tests with `python3 -m unittest discover -s tests -v` in the installed envir
 
 - **RiiTube** by Larsenv, which inspired this project ([Larsenv/RiiTube](https://github.com/Larsenv/RiiTube))
 - **yt-dlp** and its **yt-dlp-ejs** companion by the yt-dlp contributors, for searching YouTube and downloading videos
+- **SponsorBlock** by Ajay Ramachandran and its contributors, for the sponsor segment timestamps
 - **FFmpeg** by the FFmpeg developers, for converting videos and burning in subtitles
 - **Node.js** by the Node.js contributors, the JavaScript runtime yt-dlp uses
 - **Flask** by Pallets, **Waitress** by the Zope Foundation and contributors, and **Pillow** by Jeffrey "Alex" Clark and contributors, for the web server and thumbnails

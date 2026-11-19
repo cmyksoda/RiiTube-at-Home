@@ -408,7 +408,7 @@ footer {
 <form id="search"><label for="query">Search Videos</label><input id="query" aria-label="Search or YouTube link" placeholder="Search YouTube or paste a video link" required maxlength="200"><button>Search</button>
 <p class="search-hint">Find an old favorite, a new obsession, or something very, very long.</p>
 </form>
-<div class="caption-option"><input type="checkbox" id="hardsubs" checked><label for="hardsubs">Add hardsubs if available?</label><input type="checkbox" id="crop"><label for="crop">Crop to 4:3?</label></div>
+<div class="caption-option"><input type="checkbox" id="hardsubs" checked><label for="hardsubs">Add hardsubs if available?</label><input type="checkbox" id="sponsors" checked><label for="sponsors">Skip sponsored segments?</label><input type="checkbox" id="crop"><label for="crop">Crop to 4:3?</label></div>
 </div>
 <div class="layout">
 <main>
@@ -478,7 +478,7 @@ function card(item, prepared) {
     if (item.status === 'ready') {
       const player = el('player');
       player.hidden = false;
-      player.src = `/media/${item.id}.mp4`;
+      player.src = `/media/${item.id}.mkv`;
       player.dataset.videoId = item.id;
       player.scrollIntoView({ behavior: 'smooth' });
       player.play().catch(error => message(error.message));
@@ -489,7 +489,7 @@ function card(item, prepared) {
       await api('/api/prepare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video: item.id, hardsubs: el('hardsubs').checked, crop: el('crop').checked })
+        body: JSON.stringify({ video: item.id, hardsubs: el('hardsubs').checked, skip_sponsors: el('sponsors').checked, crop: el('crop').checked })
       });
       message('Queued! Check My Videos for progress.');
       await refresh();

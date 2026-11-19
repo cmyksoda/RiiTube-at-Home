@@ -3,6 +3,7 @@
 # Copyright (C) 2026 cmyksoda
 """RiiTube at Home: prepare seekable YouTube videos for WiiMC over a home LAN."""
 
+import hashlib
 import io
 import ipaddress
 import json
@@ -17,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import urlopen
 import xml.etree.ElementTree as ET
@@ -52,6 +54,8 @@ YTDLP = [
     "--socket-timeout",
     "30",
 ]
+SPONSORBLOCK_API = "https://sponsor.ajay.app/api/skipSegments/"
+FPS = 30
 SUBTITLE_STYLE = (
     "FontName=Noto Sans,FontSize=20,PrimaryColour=&H0000FFFF,"
     "OutlineColour=&H00000000,BorderStyle=1,Outline=1.6,Shadow=0,"
@@ -110,10 +114,12 @@ def load_jobs():
             job = json.loads(file.read_text())
             vid = video_id(file.parent.name)
             job["id"] = vid
-            missing_video = not (file.parent / "video.mp4").is_file()
-            if job.get("wii_format") == "mkv":
-                missing_video |= not (file.parent / "video.mkv").is_file()
-            if job["status"] == "ready" and missing_video:
+            video = file.parent / "video.mkv"
+            if video.is_file():
+                # Versions before 1.2.0 also kept MP4 and MPEG-TS copies of the same video.
+                for old_copy in ("video.mp4", "video.ts"):
+                    (file.parent / old_copy).unlink(missing_ok=True)
+            if job["status"] == "ready" and not video.is_file():
                 job.update(status="error", detail="Cached video is missing; prepare it again.")
             elif job["status"] != "ready":
                 job.update(status="error", detail="Preparation was interrupted; prepare it again.")
@@ -122,7 +128,7 @@ def load_jobs():
             logging.exception("Could not load cached job %s", file)
 
 
-def enqueue(vid, hardsubs=True, crop=False):
+def enqueue(vid, hardsubs=True, skip_sponsors=True, crop=False):
     global worker_started
     with lock:
         if not worker_started:
@@ -130,7 +136,11 @@ def enqueue(vid, hardsubs=True, crop=False):
             worker_started = True
         if vid in jobs and jobs[vid]["status"] != "error":
             existing = jobs[vid]
-            if existing.get("hardsubs", True) == hardsubs and existing.get("crop", False) == crop:
+            if (
+                existing.get("hardsubs", True) == hardsubs
+                and existing.get("skip_sponsors", False) == skip_sponsors
+                and existing.get("crop", False) == crop
+            ):
                 return dict(existing)
             if existing["status"] != "ready":
                 raise ValueError(
@@ -144,6 +154,7 @@ def enqueue(vid, hardsubs=True, crop=False):
             "status": "queued",
             "detail": "Waiting for the preparation worker.",
             "hardsubs": hardsubs,
+            "skip_sponsors": skip_sponsors,
             "crop": crop,
         }
         result = patch_job(vid)
@@ -216,15 +227,66 @@ def download_captions(info, infofile, folder, logfile):
     return language
 
 
-def video_filter(captions=False, crop=False):
+def sponsor_segments(vid, duration):
+    """Return merged (start, end) sponsor cuts, or None if SponsorBlock can't be reached."""
+    # A hash prefix keeps SponsorBlock from learning exactly which video is being prepared.
+    prefix = hashlib.sha256(vid.encode()).hexdigest()[:4]
+    query = urlencode({"categories": '["sponsor"]', "actionTypes": '["skip"]'})
+    try:
+        with urlopen(f"{SPONSORBLOCK_API}{prefix}?{query}", timeout=10) as response:
+            videos = json.load(response)
+        segments = next((item["segments"] for item in videos if item["videoID"] == vid), [])
+    except HTTPError as exc:
+        return [] if exc.code == 404 else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    cuts = []
+    for segment in segments:
+        start, end = segment["segment"]
+        submitted = segment.get("videoDuration") or 0
+        drift = abs(duration - submitted) if submitted else 0
+        # Same rule as yt-dlp: segments timed on an older upload would cut the wrong part.
+        if not (drift < 1 or (drift < 5 and end > start and drift / (end - start) < 0.05)):
+            continue
+        start = 0 if start <= 1 else start
+        end = duration if duration - end <= 1 else min(end, duration)
+        if end > start:
+            cuts.append([start, end])
+    merged = []
+    for start, end in sorted(cuts):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    if sum(end - start for start, end in merged) >= duration:
+        return []
+    return [tuple(cut) for cut in merged]
+
+
+def cut_expression(cuts):
+    # Edges sit half a frame off the frame grid, so video drops exactly the frames audio drops.
+    edges = [[(round(edge * FPS) - 0.5) / FPS for edge in cut] for cut in cuts]
+    return "+".join(f"between(t,{start:.4f},{end:.4f})" for start, end in edges)
+
+
+def video_filter(captions=False, crop=False, cuts=()):
     filters = (
-        "scale=640:360:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,fps=30"
+        "scale=640:360:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,"
+        f"fps={FPS}"
     )
     if crop:
         filters = "crop=w='min(iw,ih*4/3)':h=ih," + filters
     if captions:
         filters += f",subtitles=filename=english.srt:force_style='{SUBTITLE_STYLE}'"
+    if cuts:
+        # Cutting after the subtitles burn in keeps them on the timeline they were written for.
+        filters += f",select='not({cut_expression(cuts)})',setpts=N/FRAME_RATE/TB"
     return filters
+
+
+def audio_filter(cuts):
+    # Small audio frames let the cut land within about a millisecond of the video cut.
+    return f"asetnsamples=n=64,aselect='not({cut_expression(cuts)})',asetpts=N/SR/TB"
 
 
 def prepare(vid):
@@ -267,11 +329,19 @@ def prepare(vid):
     if info.get("is_live"):
         raise RuntimeError("Live streams are not supported; choose a finished video.")
     use_hardsubs = jobs[vid].get("hardsubs", True)
+    skip_sponsors = jobs[vid].get("skip_sponsors", False)
     use_crop = jobs[vid].get("crop", False)
+    duration = info.get("duration") or 0
     caption_language = None
     if use_hardsubs:
         patch_job(vid, detail="Checking for creator-provided English subtitles…")
         caption_language = download_captions(info, infofile, folder, logfile)
+    cuts = []
+    if skip_sponsors:
+        patch_job(vid, detail="Checking SponsorBlock for sponsored segments…")
+        cuts = sponsor_segments(vid, duration)
+    removed = sum(end - start for start, end in cuts or [])
+    expected = duration - removed
     patch_job(
         vid,
         title=info.get("title", vid),
@@ -286,12 +356,11 @@ def prepare(vid):
     if not sources:
         raise RuntimeError("Download did not produce a complete source video.")
     source = max(sources, key=lambda p: p.stat().st_mtime)
-    duration = info.get("duration") or 0
 
     def encode_progress(line):
-        if line.startswith("out_time_us=") and duration:
+        if line.startswith("out_time_us=") and expected:
             try:
-                percent = min(100, int(line.split("=", 1)[1]) / 10000 / duration)
+                percent = min(100, int(line.split("=", 1)[1]) / 10000 / expected)
                 patch_job(vid, detail=f"Converting for Wii: {percent:.0f}%")
             except ValueError:
                 pass
@@ -312,7 +381,8 @@ def prepare(vid):
             "-map",
             "0:a:0?",
             "-vf",
-            video_filter(bool(caption_language), use_crop),
+            video_filter(bool(caption_language), use_crop, cuts),
+            *(["-af", audio_filter(cuts)] if cuts else []),
             "-c:v",
             "libx264",
             "-preset",
@@ -341,8 +411,6 @@ def prepare(vid):
             "44100",
             "-b:a",
             "128k",
-            "-movflags",
-            "+faststart",
             "-progress",
             "pipe:1",
             "-nostats",
@@ -359,8 +427,9 @@ def prepare(vid):
         check=True,
     )
     actual = float(json.loads(probe.stdout)["format"]["duration"])
-    if actual <= 0 or (duration and actual < duration - max(3, duration * 0.01)):
+    if actual <= 0 or (expected and actual < expected - max(3, expected * 0.01)):
         raise RuntimeError("Converted video is incomplete; refusing to publish it.")
+    # Remuxing from MP4 avoids the newer Matroska CodecDelay element; WiiMC is proven on this layout.
     wii_output = folder / "video.pending.mkv"
     run_logged(
         [
@@ -384,7 +453,7 @@ def prepare(vid):
         ],
         logfile,
     )
-    output.replace(folder / "video.mp4")
+    output.unlink()
     wii_output.replace(folder / "video.mkv")
     caption_note = (
         "creator-provided English hardsubs"
@@ -393,11 +462,17 @@ def prepare(vid):
     )
     if not use_hardsubs:
         caption_note = "hardsubs turned off"
+    if cuts is None:
+        caption_note += ", SponsorBlock unreachable so sponsors were kept"
+    elif cuts:
+        minutes, seconds = divmod(round(removed), 60)
+        plural = "s" if len(cuts) > 1 else ""
+        caption_note += f", {len(cuts)} sponsor segment{plural} removed ({minutes}:{seconds:02})"
+    elif skip_sponsors:
+        caption_note += ", no sponsor segments found"
     if use_crop:
         caption_note += ", cropped to 4:3"
-    patch_job(
-        vid, status="ready", detail=f"Ready — {caption_note}.", duration=actual, wii_format="mkv"
-    )
+    patch_job(vid, status="ready", detail=f"Ready — {caption_note}.", duration=actual)
     source.unlink(missing_ok=True)
     infofile.unlink(missing_ok=True)
 
@@ -534,11 +609,13 @@ def api_prepare():
     try:
         data = request.get_json() or {}
         hardsubs = data.get("hardsubs", True)
+        skip_sponsors = data.get("skip_sponsors", True)
         crop = data.get("crop", False)
-        if not isinstance(hardsubs, bool) or not isinstance(crop, bool):
-            raise ValueError("The hardsubs and crop options must be true or false.")
+        if not all(isinstance(option, bool) for option in (hardsubs, skip_sponsors, crop)):
+            raise ValueError("The hardsubs, sponsor and crop options must be true or false.")
         vid = video_id(data.get("video", ""))
-        return jsonify(enqueue(vid, hardsubs=hardsubs, crop=crop)), 202
+        job = enqueue(vid, hardsubs=hardsubs, skip_sponsors=skip_sponsors, crop=crop)
+        return jsonify(job), 202
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
 
@@ -565,18 +642,17 @@ def remove_video(vid):
     return jsonify(removed=vid)
 
 
-@app.get("/media/<vid>.<extension>")
-def media(vid, extension):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{11}", vid) or extension not in {"mp4", "mkv", "ts"}:
+@app.get("/media/<vid>.mkv")
+def media(vid):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
         abort(404)
     with lock:
         if jobs.get(vid, {}).get("status") != "ready":
             abort(404)
-        path = DATA / vid / f"video.{extension}"
+        path = DATA / vid / "video.mkv"
         if not path.is_file():
             abort(404)
-        mime = {"mp4": "video/mp4", "mkv": "video/x-matroska", "ts": "video/mp2t"}[extension]
-        response = send_file(path, mimetype=mime, conditional=True)
+        response = send_file(path, mimetype="video/x-matroska", conditional=True)
     # MPlayer checks this on the initial 200 response before enabling seeking.
     response.headers["Accept-Ranges"] = "bytes"
     return response
@@ -674,11 +750,7 @@ def wii_video(vid):
         job = dict(jobs.get(vid, {}))
         title = job.get("title", metadata.get(vid, {}).get("title", vid))
     if job.get("status") == "ready":
-        extension = "mkv" if (DATA / vid / "video.mkv").is_file() else "mp4"
-        entries = [("video", f"Play: {title}", f"/media/{vid}.{extension}", vid)]
-        if (DATA / vid / "video.ts").is_file():
-            entries.append(("video", "Compatibility playback", f"/media/{vid}.ts", vid))
-        return plx(entries)
+        return plx([("video", f"Play: {title}", f"/media/{vid}.mkv", vid)])
     if not job or job.get("status") == "error":
         label = "Prepare for Wii" if not job else "Retry preparation"
         entries = [("playlist", f"{label}: {title}", f"/wiimc/prepare/{vid}.plx", vid)]

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 import xml.etree.ElementTree as ET
 
@@ -29,7 +30,7 @@ class LanServerTests(unittest.TestCase):
     def ready_file(self):
         folder = Path(self.temp.name) / self.vid
         folder.mkdir(exist_ok=True)
-        path = folder / "video.mp4"
+        path = folder / "video.mkv"
         path.write_bytes(bytes(range(256)) * 32)
         self.module.jobs[self.vid] = {"id": self.vid, "title": "Test", "status": "ready"}
         return path
@@ -37,7 +38,7 @@ class LanServerTests(unittest.TestCase):
     def test_range_and_head_for_mplayer_seeking(self):
         path = self.ready_file()
         full = path.read_bytes()
-        url = f"/media/{self.vid}.mp4"
+        url = f"/media/{self.vid}.mkv"
         with self.client.get(url) as response:
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers["Accept-Ranges"], "bytes")
@@ -63,7 +64,7 @@ class LanServerTests(unittest.TestCase):
             file.truncate(size)
             file.seek(size - 4)
             file.write(b"tail")
-        url = f"/media/{self.vid}.mp4"
+        url = f"/media/{self.vid}.mkv"
         with self.client.head(url) as response:
             self.assertEqual(int(response.headers["Content-Length"]), size)
         with self.client.get(url, headers={"Range": "bytes=-4"}) as response:
@@ -73,25 +74,24 @@ class LanServerTests(unittest.TestCase):
     def test_partial_video_is_not_published(self):
         self.ready_file()
         self.module.jobs[self.vid]["status"] = "converting"
-        self.assertEqual(self.client.get(f"/media/{self.vid}.mp4").status_code, 404)
+        self.assertEqual(self.client.get(f"/media/{self.vid}.mkv").status_code, 404)
 
-    def test_wii_variants_preserve_browser_mp4_and_support_ranges(self):
+    def test_only_the_mkv_is_served_and_old_copies_are_cleared(self):
         path = self.ready_file()
-        path.with_suffix(".mkv").write_bytes(b"matroska-test")
-        path.with_suffix(".ts").write_bytes(b"mpeg-test")
+        for old_copy in ("video.mp4", "video.ts"):
+            (path.parent / old_copy).write_bytes(b"old")
         playlist = self.client.get(f"/wiimc/video/{self.vid}.plx").text
         self.assertIn(f"/media/{self.vid}.mkv", playlist)
-        self.assertIn(f"/media/{self.vid}.ts", playlist)
-        self.assertNotIn(f"/media/{self.vid}.mp4", playlist)
-        for ext in ("mkv", "ts", "mp4"):
-            with self.client.get(
-                f"/media/{self.vid}.{ext}", headers={"Range": "bytes=0-3"}
-            ) as response:
-                self.assertEqual(response.status_code, 206)
-                self.assertEqual(len(response.data), 4)
-        self.assertEqual(self.client.get(f"/media/{self.vid}.json").status_code, 404)
-        path.with_suffix(".mkv").unlink()
-        self.assertEqual(self.client.get(f"/media/{self.vid}.mkv").status_code, 404)
+        self.assertNotIn(".mp4", playlist)
+        self.assertNotIn(".ts", playlist)
+        for ext in ("mp4", "ts", "json"):
+            self.assertEqual(self.client.get(f"/media/{self.vid}.{ext}").status_code, 404)
+        self.module.patch_job(self.vid)
+        self.module.jobs.clear()
+        self.module.load_jobs()
+        self.assertEqual(self.module.jobs[self.vid]["status"], "ready")
+        names = sorted(file.name for file in path.parent.iterdir())
+        self.assertEqual(names, ["job.json", "video.mkv"])
 
     def test_url_validation(self):
         for value in [
@@ -130,12 +130,14 @@ class LanServerTests(unittest.TestCase):
         self.assertFalse((folder / "english.srt").exists())
         run.assert_not_called()
 
-    def test_missing_required_mkv_is_not_ready_after_restart(self):
-        self.ready_file()
-        self.module.patch_job(self.vid, wii_format="mkv")
+    def test_missing_mkv_is_not_ready_after_restart(self):
+        path = self.ready_file()
+        self.module.patch_job(self.vid)
+        path.rename(path.with_suffix(".mp4"))
         self.module.jobs.clear()
         self.module.load_jobs()
         self.assertEqual(self.module.jobs[self.vid]["status"], "error")
+        self.assertTrue(path.with_suffix(".mp4").exists())
 
     def test_playlist_escape_and_local_links(self):
         with patch.object(
@@ -300,6 +302,79 @@ class LanServerTests(unittest.TestCase):
         self.assertTrue(cropped.startswith("crop=w='min(iw,ih*4/3)':h=ih,scale="))
         self.assertLess(cropped.index("scale="), cropped.index("subtitles="))
 
+    def test_sponsor_skipping_defaults_on_for_web_and_wii(self):
+        self.module.worker_started = True
+        response = self.client.post("/api/prepare", json={"video": self.vid})
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(response.json["skip_sponsors"])
+        saved = json.loads((Path(self.temp.name) / self.vid / "job.json").read_text())
+        self.assertTrue(saved["skip_sponsors"])
+        response = self.client.post("/api/prepare", json={"video": self.vid, "skip_sponsors": "no"})
+        self.assertEqual(response.status_code, 400)
+        other = "roBkg-iPrbw"
+        self.client.get(f"/wiimc/prepare/{other}.plx")
+        self.assertTrue(self.module.jobs[other]["skip_sponsors"])
+
+    def test_changing_sponsor_skipping_reprepares_only_finished_jobs(self):
+        self.module.worker_started = True
+        self.ready_file()
+        self.module.patch_job(self.vid, skip_sponsors=True)
+        self.assertEqual(self.module.enqueue(self.vid)["status"], "ready")
+        job = self.module.enqueue(self.vid, skip_sponsors=False)
+        self.assertEqual(job["status"], "queued")
+        with self.assertRaises(ValueError):
+            self.module.enqueue(self.vid, skip_sponsors=True)
+        self.assertEqual(self.module.pending.qsize(), 1)
+
+    def sponsorblock_reply(self, segments, video=None):
+        body = [
+            {"videoID": "zzzzzzzzzzz", "segments": [{"segment": [0, 50], "videoDuration": 100}]},
+            {"videoID": video or self.vid, "segments": segments},
+        ]
+        reply = io.BytesIO(json.dumps(body).encode())
+        return patch.object(self.module, "urlopen", return_value=reply)
+
+    def test_sponsor_segments_are_matched_cleaned_and_merged(self):
+        segments = [
+            {"segment": [0.4, 20], "videoDuration": 100},
+            {"segment": [60, 70], "videoDuration": 100.5},
+            {"segment": [65, 80], "videoDuration": 0},
+            {"segment": [30, 40], "videoDuration": 130},
+            {"segment": [95, 99.5], "videoDuration": 100},
+        ]
+        with self.sponsorblock_reply(segments) as fetch:
+            cuts = self.module.sponsor_segments(self.vid, 100)
+        self.assertEqual(cuts, [(0, 20), (60, 80), (95, 100)])
+        url = fetch.call_args[0][0]
+        self.assertNotIn(self.vid, url)
+        self.assertIn("sponsor", url)
+        with self.sponsorblock_reply(segments, video="yyyyyyyyyyy"):
+            self.assertEqual(self.module.sponsor_segments(self.vid, 100), [])
+
+    def test_sponsorblock_misses_and_outages_are_told_apart(self):
+        missing = HTTPError("url", 404, "Not Found", {}, None)
+        with patch.object(self.module, "urlopen", side_effect=missing):
+            self.assertEqual(self.module.sponsor_segments(self.vid, 100), [])
+        for failure in [
+            HTTPError("url", 503, "Unavailable", {}, None),
+            URLError("offline"),
+            TimeoutError(),
+        ]:
+            with patch.object(self.module, "urlopen", side_effect=failure):
+                self.assertIsNone(self.module.sponsor_segments(self.vid, 100))
+        with self.sponsorblock_reply([{"segment": [0, 100], "videoDuration": 100}]):
+            self.assertEqual(self.module.sponsor_segments(self.vid, 100), [])
+
+    def test_sponsor_cuts_come_after_subtitles_in_both_streams(self):
+        cuts = [(10, 20.5), (60, 75)]
+        expression = "not(between(t,9.9833,20.4833)+between(t,59.9833,74.9833))"
+        video = self.module.video_filter(captions=True, cuts=cuts)
+        self.assertLess(video.index("subtitles="), video.index("select="))
+        self.assertTrue(video.endswith(f",select='{expression}',setpts=N/FRAME_RATE/TB"))
+        audio = self.module.audio_filter(cuts)
+        self.assertEqual(audio, f"asetnsamples=n=64,aselect='{expression}',asetpts=N/SR/TB")
+        self.assertNotIn("select", self.module.video_filter(captions=True))
+
     def test_changing_captions_reprepares_only_finished_jobs(self):
         self.module.worker_started = True
         self.ready_file()
@@ -350,7 +425,7 @@ class LanServerTests(unittest.TestCase):
         self.assertNotIn(self.vid, self.module.jobs)
         self.assertNotIn(self.vid, self.module.metadata)
         self.assertEqual((neighbor / "video.mkv").read_bytes(), b"keep")
-        self.assertEqual(self.client.get(f"/media/{self.vid}.mp4").status_code, 404)
+        self.assertEqual(self.client.get(f"/media/{self.vid}.mkv").status_code, 404)
         self.assertNotIn(self.vid, self.client.get("/wiimc/library.plx").text)
         self.module.load_jobs()
         self.assertNotIn(self.vid, self.module.jobs)
