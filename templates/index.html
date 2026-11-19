@@ -489,7 +489,12 @@ function card(item, prepared) {
       await api('/api/prepare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video: item.id, hardsubs: el('hardsubs').checked, skip_sponsors: el('sponsors').checked, crop: el('crop').checked })
+        body: JSON.stringify({
+          video: item.id,
+          hardsubs: el('hardsubs').checked,
+          skip_sponsors: el('sponsors').checked,
+          crop: el('crop').checked
+        })
       });
       message('Queued! Check My Videos for progress.');
       await refresh();

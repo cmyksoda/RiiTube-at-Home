@@ -78,6 +78,7 @@ for vid, hardsubs, sponsors, crop in [
         assert response.headers.get_content_type() == 'image/jpeg'
         assert response.read().startswith(b'\xff\xd8')
 print(
-    'Both caption choices, download/encode, MKV playback routes, thumbnails and range requests passed.',
+    'Both caption choices, download/encode, MKV playback routes, thumbnails '
+    'and range requests passed.',
     flush=True,
 )

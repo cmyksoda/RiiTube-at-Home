@@ -144,7 +144,8 @@ def enqueue(vid, hardsubs=True, skip_sponsors=True, crop=False):
                 return dict(existing)
             if existing["status"] != "ready":
                 raise ValueError(
-                    "This video is already preparing. Wait until it finishes before changing options."
+                    "This video is already preparing. "
+                    "Wait until it finishes before changing options."
                 )
         info = metadata.get(vid, {})
         jobs[vid] = {
@@ -429,7 +430,8 @@ def prepare(vid):
     actual = float(json.loads(probe.stdout)["format"]["duration"])
     if actual <= 0 or (expected and actual < expected - max(3, expected * 0.01)):
         raise RuntimeError("Converted video is incomplete; refusing to publish it.")
-    # Remuxing from MP4 avoids the newer Matroska CodecDelay element; WiiMC is proven on this layout.
+    # Remuxing from MP4 avoids the newer Matroska CodecDelay element;
+    # WiiMC is proven on this layout.
     wii_output = folder / "video.pending.mkv"
     run_logged(
         [
