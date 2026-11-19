@@ -117,7 +117,7 @@ def load_jobs():
             job["id"] = vid
             video = file.parent / "video.mkv"
             if video.is_file():
-                # Versions before 1.2.0 also kept MP4 and MPEG-TS copies of the same video.
+                # Earlier versions also kept an MP4 copy, and pre-1.0.0 builds an MPEG-TS one.
                 for old_copy in ("video.mp4", "video.ts"):
                     (file.parent / old_copy).unlink(missing_ok=True)
             if job["status"] == "ready" and not video.is_file():
