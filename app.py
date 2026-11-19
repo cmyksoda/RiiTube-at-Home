@@ -54,6 +54,7 @@ YTDLP = [
     "--socket-timeout",
     "30",
 ]
+VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 SPONSORBLOCK_API = "https://sponsor.ajay.app/api/skipSegments/"
 FPS = 30
 SUBTITLE_STYLE = (
@@ -74,7 +75,7 @@ worker_started = False
 
 def video_id(value):
     value = str(value).strip()
-    if re.fullmatch(r"[A-Za-z0-9_-]{11}", value):
+    if VIDEO_ID.fullmatch(value):
         return value
     parsed = urlparse(value)
     host = (parsed.hostname or "").lower()
@@ -88,7 +89,7 @@ def video_id(value):
             candidate = parsed.path.split("/")[2]
     else:
         raise ValueError("Only YouTube video URLs are supported.")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{11}", candidate):
+    if not VIDEO_ID.fullmatch(candidate):
         raise ValueError("That URL does not contain a YouTube video ID.")
     return candidate
 
@@ -538,7 +539,7 @@ def search_page(query, page=1):
     raw_entries = json.loads(result.stdout).get("entries") or []
     has_next = len(raw_entries) > SEARCH_PAGE_SIZE
     for item in raw_entries[:SEARCH_PAGE_SIZE]:
-        if not item or not re.fullmatch(r"[A-Za-z0-9_-]{11}", item.get("id", "")):
+        if not item or not VIDEO_ID.fullmatch(item.get("id", "")):
             continue
         entries.append(
             {
@@ -624,7 +625,7 @@ def api_prepare():
 
 @app.delete("/api/videos/<vid>")
 def remove_video(vid):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
+    if not VIDEO_ID.fullmatch(vid):
         return jsonify(error="Invalid video ID."), 400
     with lock:
         job = jobs.get(vid)
@@ -646,7 +647,7 @@ def remove_video(vid):
 
 @app.get("/media/<vid>.mkv")
 def media(vid):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
+    if not VIDEO_ID.fullmatch(vid):
         abort(404)
     with lock:
         if jobs.get(vid, {}).get("status") != "ready":
@@ -662,7 +663,7 @@ def media(vid):
 
 @app.get("/thumb/<vid>.jpg")
 def thumb(vid):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
+    if not VIDEO_ID.fullmatch(vid):
         abort(404)
     folder = DATA / vid
     target = folder / "thumb.jpg"
