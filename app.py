@@ -282,13 +282,17 @@ def video_filter(captions=False, crop=False, cuts=()):
         filters += f",subtitles=filename=english.srt:force_style='{SUBTITLE_STYLE}'"
     if cuts:
         # Cutting after the subtitles burn in keeps them on the timeline they were written for.
-        filters += f",select='not({cut_expression(cuts)})',setpts=N/FRAME_RATE/TB"
+        # Rounding stops setpts truncating a frame onto the previous one's timestamp,
+        # and the closing fps restores the 30/1 rate setpts leaves unset.
+        filters += (
+            f",select='not({cut_expression(cuts)})',setpts=round(N/FRAME_RATE/TB),fps={FPS}"
+        )
     return filters
 
 
 def audio_filter(cuts):
     # Small audio frames let the cut land within about a millisecond of the video cut.
-    return f"asetnsamples=n=64,aselect='not({cut_expression(cuts)})',asetpts=N/SR/TB"
+    return f"asetnsamples=n=64,aselect='not({cut_expression(cuts)})',asetpts=round(N/SR/TB)"
 
 
 def prepare(vid):

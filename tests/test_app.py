@@ -3,6 +3,8 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -370,10 +372,53 @@ class LanServerTests(unittest.TestCase):
         expression = "not(between(t,9.9833,20.4833)+between(t,59.9833,74.9833))"
         video = self.module.video_filter(captions=True, cuts=cuts)
         self.assertLess(video.index("subtitles="), video.index("select="))
-        self.assertTrue(video.endswith(f",select='{expression}',setpts=N/FRAME_RATE/TB"))
+        self.assertTrue(
+            video.endswith(f",select='{expression}',setpts=round(N/FRAME_RATE/TB),fps=30")
+        )
         audio = self.module.audio_filter(cuts)
-        self.assertEqual(audio, f"asetnsamples=n=64,aselect='{expression}',asetpts=N/SR/TB")
+        self.assertEqual(
+            audio, f"asetnsamples=n=64,aselect='{expression}',asetpts=round(N/SR/TB)"
+        )
         self.assertNotIn("select", self.module.video_filter(captions=True))
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "needs ffmpeg")
+    def test_sponsor_cuts_keep_every_frame_and_the_audio_length(self):
+        cuts = [(2, 3)]
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=160x90:rate=30000/1001:duration=7",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=sample_rate=44100:duration=7",
+                "-vf",
+                self.module.video_filter(cuts=cuts),
+                "-af",
+                self.module.audio_filter(cuts),
+                # FFmpeg 8 repairs repeated timestamps that 7.1 drops; passthrough shows them raw.
+                "-fps_mode",
+                "passthrough",
+                "-f",
+                "framecrc",
+                "-",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        packets = [
+            line.split(", ") for line in result.stdout.splitlines() if line.startswith(("0,", "1,"))
+        ]
+        video = [int(packet[1]) for packet in packets if packet[0] == "0"]
+        samples = sum(int(packet[3]) for packet in packets if packet[0] == "1")
+        self.assertEqual(video, list(range(len(video))))
+        self.assertAlmostEqual(samples / 44100, len(video) / 30, delta=1 / 30)
 
     def test_changing_captions_reprepares_only_finished_jobs(self):
         self.module.worker_started = True
